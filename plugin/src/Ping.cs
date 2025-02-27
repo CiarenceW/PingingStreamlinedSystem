@@ -10,8 +10,10 @@ namespace PingingStreamlinedSystem
         {
             Destroy(this.gameObject, PingingStreamlinedSystemPlugin.Options.pingDuration.Value);
 
+            DestroyImmediate(this.GetComponent<MeshCollider>());
+
             var renderer = this.GetComponent<MeshRenderer>();
-            var mat = new Material(Shader.Find("Alloy/Unlit"));
+            var mat = new Material(PingingStreamlinedSystemPlugin.Instance.pingMat);
             renderer.material = mat;
             renderer.material.mainTexture = PingingStreamlinedSystemPlugin.Instance.pingTexture;
         }

@@ -48,6 +48,10 @@
         <PackageReference Include="UnityEngine" Version="5.6.1"/>
         <PackageReference Include="BepInEx.Core" Version="5.4.17"/>
         <PackageReference Include="H3VR.GameLibs" Version="0.111.5"/>
+
+        <Reference Include="H3MP">
+            <HintPath>../lib/H3MP.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <!-- When in debug mode, also build mono debugging symbols (Only available on Windows) -->

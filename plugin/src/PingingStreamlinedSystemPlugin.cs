@@ -8,18 +8,31 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using FistVR;
 using FMOD.Studio;
+using H3MP;
 using HarmonyLib;
 using UnityEngine;
+using FFmpeg.AutoGen;
+using System.Linq;
+using H3MP.Networking;
 
 namespace PingingStreamlinedSystem
 {
     [BepInAutoPlugin]
     [BepInProcess("h3vr.exe")]
+    [BepInDependency("VIP.TommySoucy.H3MP", BepInDependency.DependencyFlags.SoftDependency)] //this is soft for testing, whatever, blabla I'm crazy now
     public partial class PingingStreamlinedSystemPlugin : BaseUnityPlugin
     {
+        public const string PING_PACKET_ID = "PiSS-Ping";
+
         internal static PingingStreamlinedSystemPlugin Instance { get; set; }
 
-        private static bool testing;
+        private static bool testing; //so I don't have to plug in my stupid chud headset everytime I want to test the most minute feature
+
+        private static bool networkingSetUp;
+
+        internal Material pingMat = new Material(Shader.Find("Alloy/Unlit"));
+
+        internal static bool isH3MPInstalled = BepInEx.Bootstrap.Chainloader.PluginInfos.TryGetValue("VIP.TommySoucy.H3MP", out var _);
 
         internal Texture2D pingTexture;
 
@@ -33,9 +46,14 @@ namespace PingingStreamlinedSystem
 
             Instance = this;
 
-            StartCoroutine(LoadPingTexture(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/ping.png"));
+            StartCoroutine(LoadPingTexture(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\ping.png"));
 
-            StartCoroutine(LoadPingAudio(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "/ping.ogg"));
+            StartCoroutine(LoadPingAudio(Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location) + "\\ping.ogg")); //fucking bullshit has to be a backward slash? fucking windows fucking fuck motherfuckf ufkc
+
+            if (isH3MPInstalled)
+            {
+                ConfigureH3MPStuff();
+            }
 
             Options.InitialiseAndBind(Config);
             
@@ -43,6 +61,44 @@ namespace PingingStreamlinedSystem
 
             // Your plugin's ID, Name, and Version are available here.
             Logger.LogMessage($"{Id}: {Name} version {Version} loaded!");
+        }
+
+        private int GetHostCustomPacket(string id)
+        {
+            return Mod.registeredCustomPacketIDs.ContainsKey(id) ? Mod.registeredCustomPacketIDs[id] : Server.RegisterCustomPacketType(id);
+        }
+
+        private bool IsClientCustomPacketRegistered(string id)
+        {
+            return Mod.registeredCustomPacketIDs.ContainsKey(id);
+        }
+
+        private void ConfigureH3MPStuff()
+        {
+            if (Mod.managerObject == null)
+                return;
+
+            //this is not how you do this
+            if (ThreadManager.host)
+            {
+                int pingId = GetHostCustomPacket(PING_PACKET_ID);
+                Mod.customPacketHandlers[pingId] = HandlePingPacket;
+            }
+            else
+            {
+                if (IsClientCustomPacketRegistered(PING_PACKET_ID))
+                {
+                    int pingId = Mod.registeredCustomPacketIDs[PING_PACKET_ID];
+                    Mod.customPacketHandlers[pingId] = HandlePingPacket;
+                }
+                else
+                {
+                    ClientSend.RegisterCustomPacketType(PING_PACKET_ID);
+                    Mod.CustomPacketHandlerReceived += ReceivedPingPacket;
+                }
+            }
+
+            networkingSetUp = true;
         }
 
         private IEnumerator LoadPingAudio(string path)
@@ -107,7 +163,7 @@ namespace PingingStreamlinedSystem
                 Instance.ShootLaser(__instance);
             }
 
-            if (isShootingLaser && (__instance.Input.TriggerPressed || Input.GetMouseButtonDown(0) && testing))
+            if (isShootingLaser && (__instance.Input.TriggerPressed || Input.GetMouseButtonDown(0) && testing && __instance.IsThisTheRightHand))
             {
                 Instance.Ping();
             }
@@ -148,7 +204,25 @@ namespace PingingStreamlinedSystem
             var lastHitInfo = recentlyPointedObjects.Pop();
 
             var pingGo = CreatePingObject(lastHitInfo.hitPos, lastHitInfo.hitObject);
-            SM.PlayGenericSound(pingAudio, pingGo.transform.position);
+            SM.PlayGenericSound(pingAudio, GM.CurrentPlayerBody.Head.transform.position);
+
+            if (isH3MPInstalled)
+            {
+                if (!networkingSetUp)
+                {
+                    ConfigureH3MPStuff();
+                }
+            }
+        }
+
+        private void ReceivedPingPacket(string id, int index)
+        {
+
+        }
+
+        private void HandlePingPacket(int id, Packet packet)
+        {
+
         }
 
         private GameObject CreatePingObject(Vector3 pos, Transform parent = null)
@@ -160,7 +234,7 @@ namespace PingingStreamlinedSystem
 
             pingGo.AddComponent<Ping>();
 
-            if (parent == null)
+            if (parent == null && parent.GetComponent<MeshRenderer>() != null && !parent.GetComponent<MeshRenderer>().isPartOfStaticBatch)
             {
                 pingGo.transform.position = pos;
             }
